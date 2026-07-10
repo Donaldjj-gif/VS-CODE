@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Simple AI Chatbot</title>
+    <style>
+      :root {
+        --bg: #0b1220;
+        --panel: #111b33;
+        --text: #e6eefc;
+        --muted: #9fb2d6;
+        --accent: #6aa6ff;
+        --border: rgba(255, 255, 255, 0.12);
+        --danger: #ff6a6a;
+      }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica,
+          Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        background: radial-gradient(1200px 800px at 20% 10%, #14244a 0%, var(--bg) 60%);
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+      }
+      .wrap {
+        width: min(980px, 96vw);
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+      .header {
+        padding: 14px 16px;
+        background: rgba(17, 27, 51, 0.75);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+      }
+      .header h1 {
+        font-size: 16px;
+        margin: 0 0 6px;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+      }
+      .header p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .card {
+        background: rgba(17, 27, 51, 0.75);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        overflow: hidden;
+      }
+
+      .chat {
+        height: 62vh;
+        min-height: 480px;
+        max-height: 720px;
+        display: flex;
+        flex-direction: column;
+      }
+
+      #messages {
+        flex: 1;
+        padding: 14px;
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .msg {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+      }
+      .bubble {
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        max-width: 78ch;
+        line-height: 1.35;
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: rgba(255, 255, 255, 0.03);
+      }
+      .msg.user {
+        flex-direction: row-reverse;
+      }
+      .msg.user .bubble {
+        background: rgba(106, 166, 255, 0.13);
+        border-color: rgba(106, 166, 255, 0.35);
+      }
+      .meta {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+
+      .composer {
+        padding: 12px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      textarea {
+        resize: none;
+        width: 100%;
+        border-radius: 12px;
+        background: rgba(0, 0, 0, 0.2);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 10px 12px;
+        font-size: 14px;
+        line-height: 1.4;
+        height: 44px;
+        max-height: 120px;
+        outline: none;
+      }
+      textarea:focus {
+        border-color: rgba(106, 166, 255, 0.55);
+      }
+      button {
+        border: 1px solid rgba(106, 166, 255, 0.45);
+        background: rgba(106, 166, 255, 0.15);
+        color: var(--text);
+        border-radius: 12px;
+        padding: 10px 14px;
+        cursor: pointer;
+        font-weight: 700;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .select {
+        border-radius: 12px;
+        background: rgba(0, 0, 0, 0.2);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 10px 12px;
+        outline: none;
+        font-size: 13px;
+      }
+      .footer-note {
+        padding: 10px 16px 14px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .error {
+        color: var(--danger);
+        font-size: 13px;
+        margin: 10px 16px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="header">
+        <h1>Simple AI Chatbot (Front-end + Local Server)</h1>
+        <p>Works with a server endpoint at <code>/api/chat</code>. Uses streaming text responses.</p>
+      </div>
+
+      <div class="card">
+        <div class="chat">
+          <div id="messages" aria-live="polite"></div>
+          <div class="composer">
+            <div style="display:flex; gap:10px; align-items:center; width: 100%">
+              <select class="select" id="mode" title="Local reply mode">
+                <option value="echo">Echo (offline)</option>
+                <option value="local-qa" selected>Local Q&A (offline)</option>
+              </select>
+              <textarea id="input" placeholder="Type a message..." maxlength="4000"></textarea>
+            </div>
+            <button id="send">Send</button>
+          </div>
+        </div>
+        <div class="footer-note">
+          If you want real LLM answers, replace the server logic in <code>server.js</code>.
+        </div>
+      </div>
+      <div id="error" class="error" style="display:none"></div>
+    </div>
+
+    <script>
+      const messagesEl = document.getElementById('messages');
+      const inputEl = document.getElementById('input');
+      const sendBtn = document.getElementById('send');
+      const errorEl = document.getElementById('error');
+      const modeEl = document.getElementById('mode');
+
+      function escapeHtml(str) {
+        return str
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '<')
+          .replaceAll('>', '>')
+          .replaceAll('"', '"')
+          .replaceAll("'", '&#039;');
+      }
+
+      function addMessage(role, text) {
+        const wrap = document.createElement('div');
+        wrap.className = 'msg ' + role;
+
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        bubble.innerHTML = escapeHtml(text || '');
+
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.textContent = role === 'user' ? 'You' : 'Bot';
+
+        wrap.appendChild(bubble);
+        wrap.appendChild(meta);
+
+        messagesEl.appendChild(wrap);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+        return bubble;
+      }
+
+      function setError(msg) {
+        errorEl.textContent = msg;
+        errorEl.style.display = msg ? 'block' : 'none';
+      }
+
+      async function* readStream(res) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let done = false;
+        while (!done) {
+          const { value, done: doneReading } = await reader.read();
+          done = doneReading;
+          if (value) yield decoder.decode(value, { stream: true });
+        }
+      }
+
+      async function send() {
+        setError('');
+        const text = inputEl.value.trim();
+        if (!text) return;
+
+        inputEl.value = '';
+        sendBtn.disabled = true;
+
+        addMessage('user', text);
+        const botBubble = addMessage('bot', '');
+
+        try {
+          const mode = modeEl.value;
+          const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text, mode }),
+          });
+
+          if (!res.ok) {
+            const t = await res.text().catch(() => '');
+            throw new Error(`Request failed (${res.status}). ${t}`);
+          }
+
+          let accumulated = '';
+          for await (const chunk of readStream(res)) {
+            accumulated += chunk;
+            botBubble.innerHTML = escapeHtml(accumulated);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+          }
+        } catch (e) {
+          setError(e?.message || String(e));
+          botBubble.innerHTML = escapeHtml('Sorry—something went wrong.');
+        } finally {
+          sendBtn.disabled = false;
+        }
+      }
+
+      sendBtn.addEventListener('click', send);
+      inputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          send();
+        }
+      });
+
+      // initial message
+      addMessage('bot', 'Hi! Type a message and press Send.\n\nModes: Echo or Local Q&A (offline).');
+    </script>
+  </body>
+</html>
+
